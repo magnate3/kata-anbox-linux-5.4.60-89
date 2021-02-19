@@ -1,0 +1,54 @@
+        printk(KERN_EMERG     "judge binder device   \n");
+        //if (!IS_ENABLED(CONFIG_ANDROID_BINDERFS) &&
+	//    strcmp(binder_devices_param, "") != 0) {
+	if (strcmp(binder_devices_param, "") != 0) {
+		/*
+		* Copy the module_parameter string, because we don't want to
+		* tokenize it in-place.
+		 */
+		device_names = kstrdup(binder_devices_param, GFP_KERNEL);
+		if (!device_names) {
+			ret = -ENOMEM;
+			goto err_alloc_device_names_failed;
+		}
+
+		printk(KERN_EMERG     "judge binder device    = %s\n", device_names);
+		device_tmp = device_names;
+		while ((device_name = strsep(&device_tmp, ","))) {
+		        printk(KERN_EMERG     "judge binder device    = %s\n", device_name);
+			ret = init_binder_device(device_name);
+			if (ret)
+				goto err_init_binder_device_failed;
+		}
+	}
+	
+	
+	static int __init init_binder_device(const char *name)
+{
+	int ret;
+	struct binder_device *binder_device;
+
+	binder_device = kzalloc(sizeof(*binder_device), GFP_KERNEL);
+	if (!binder_device)
+		return -ENOMEM;
+
+	binder_device->miscdev.fops = &binder_fops;
+	binder_device->miscdev.minor = MISC_DYNAMIC_MINOR;
+	binder_device->miscdev.name = name;
+	binder_device->miscdev.mode= 0777;
+
+	refcount_set(&binder_device->ref, 1);
+	binder_device->context.binder_context_mgr_uid = INVALID_UID;
+	binder_device->context.name = name;
+	mutex_init(&binder_device->context.context_mgr_node_lock);
+        printk(KERN_ERR     "register binder device    = %s\n", name);
+	ret = misc_register(&binder_device->miscdev);
+	if (ret < 0) {
+		kfree(binder_device);
+		return ret;
+	}
+
+	hlist_add_head(&binder_device->hlist, &binder_devices);
+
+	return ret;
+}
